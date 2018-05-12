@@ -1872,9 +1872,6 @@
 		mediatek,clkbuf-config = <2 1 1 1>;
 	};
 };
-#ifndef CONFIG_OF_RESOLVE
-#include <cust.dtsi>
-#endif
 &eintc {
 	pmic@206 {
 	compatible = "mediatek, pmic-eint";
