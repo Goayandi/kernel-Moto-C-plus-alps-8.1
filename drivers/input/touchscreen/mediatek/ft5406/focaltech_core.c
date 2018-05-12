@@ -1187,7 +1187,7 @@ static int touch_event_handler(void *unused)
 	#endif
 	//qiumeng@wind-mobi.com 20161212 begin
 	#ifdef TPD_PROXIMITY
-	int err;
+//	int err;
 	u8 state1 = 0;
 	hwm_sensor_data sensor_data;
 	u8 proximity_status;
@@ -1316,11 +1316,11 @@ static int touch_event_handler(void *unused)
 						 sensor_data.values[0] = tpd_get_ps_value();
 						 sensor_data.value_divide = 1;
 						 sensor_data.status = SENSOR_STATUS_ACCURACY_MEDIUM;
-						 if ((err = hwmsen_get_interrupt_data(ID_PROXIMITY, &sensor_data)))
+/*						 if ((err = hwmsen_get_interrupt_data(ID_PROXIMITY, &sensor_data)))
 						 {
 							 TPD_PROXIMITY_DMESG(" proxi_5206 call hwmsen_get_interrupt_data failed= %d\n", err);
 						 }
-						TPD_PROXIMITY_DEBUG("tpd_proximity_detect value %d\n",tpd_get_ps_value());//lipaheng@wind-mobi.com add for debug 20160928
+*/						TPD_PROXIMITY_DEBUG("tpd_proximity_detect value %d\n",tpd_get_ps_value());//lipaheng@wind-mobi.com add for debug 20160928
 					 }
 				 }
 //sunsiyuan@wind-mobi.com 20170803 end
@@ -1781,14 +1781,14 @@ reset_proc:
 #ifdef TPD_PROXIMITY
 	
 	obj_ps.sensor_operate = tpd_ps_operate;
-	if((err = hwmsen_attach(ID_PROXIMITY, &obj_ps)))
+/*	if((err = hwmsen_attach(ID_PROXIMITY, &obj_ps)))
 	{
 		TPD_PROXIMITY_DEBUG("proxi_fts attach fail = %d\n", err); //qiumeng
 	}
 	else
 	{
-		TPD_PROXIMITY_DEBUG("proxi_fts attach ok = %d\n", err);   //qiumeng
-	}
+*/		TPD_PROXIMITY_DEBUG("proxi_fts attach ok = %d\n", err);   //qiumeng
+//	}
 #endif
 //qiumeng@wind-mobi.com 20161212 end
 #ifdef CONFIG_MTK_SENSOR_HUB_SUPPORT

@@ -88,7 +88,6 @@
 #define DBG(fmt, args...) 				do{}while(0)
 #endif
 
-
 typedef void (*GES_CBFUNC)(u8);
 /*****************************************************************************
  * ENUM
