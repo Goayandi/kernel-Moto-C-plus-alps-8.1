@@ -169,12 +169,5 @@ obj-$(CONFIG_MTK_TINYSYS_SCP_SUPPORT) += audio_ipi/
 obj-$(CONFIG_USB)	+= usb_boost/
 obj-$(CONFIG_RT_REGMAP) += rt-regmap/
 
-# Vanzo:wuchuanrong on: Tue, 27 Feb 2018 17:10:00 +0800
-# TODO: design for fake dual camera
-#
-ifeq ($(strip $(VANZO_FEATURE_FAKE_DUAL_CAMERA_BY_NAME)),yes)
-ifneq ($(strip $(CUSTOM_FAKE_CAMERA)),)
-subdir-ccflags-y +=            -DCONFIG_FAKE_DUAL_CAMERA
-endif
-endif
-# End of Vanzo: wuchuanrong
+obj-$(CONFIG_WIND_DEVICE_INFO) += wind_device_info/
+obj-$(CONFIG_INPUT_SX9310) += sar/
