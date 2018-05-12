@@ -181,6 +181,14 @@ config INPUT_KEYRESET
 	---help---
 	  Say Y here if you want to reboot when some keys are pressed;
 
+config INPUT_DTV
+	tristate "dtv"
+	depends on INPUT
+	---help---
+	  Say Y here if you want to add dtv;	 
+	  
+	  To compile this driver as a module, choose M here.
+
 config INPUT_KEYCOMBO
 	tristate "Key combo"
 	depends on INPUT

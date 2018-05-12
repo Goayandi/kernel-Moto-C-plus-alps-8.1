@@ -52,7 +52,5 @@ obj-$(CONFIG_TOUCHSCREEN_MTK_SYNAPTICS_3320_50) +=  synaptics_3320_50/
 obj-$(CONFIG_TOUCHSCREEN_UNIFIED_DRIVER_4)	+=  unified_driver_4/
 obj-$(CONFIG_TOUCHSCREEN_MTK_MSG2238A)  +=  msg2238a/
 obj-$(CONFIG_TOUCHSCREEN_MTK_FT6336S)   +=  ft6336s/
-# Vanzo:wangfei on: Sat, 28 Feb 2015 16:22:43 +0800
-# for use new style to config touchscreen
-endif
-# End of Vanzo:wangfei
+obj-$(CONFIG_TOUCHSCREEN_MTK_FT5406)   +=  ft5406/
+
