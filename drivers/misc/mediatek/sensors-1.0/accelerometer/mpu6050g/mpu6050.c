@@ -112,7 +112,7 @@ struct mpu6050_i2c_data {
 /*----------------------------------------------------------------------------*/
 #ifdef CONFIG_OF
 static const struct of_device_id accel_of_match[] = {
-	{.compatible = "mediatek,GSENSOR_MPU6050G"},
+	{.compatible = "mediatek,gsensor"},
 	{},
 };
 #endif

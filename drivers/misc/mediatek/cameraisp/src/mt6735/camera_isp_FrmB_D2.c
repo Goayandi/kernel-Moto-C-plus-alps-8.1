@@ -490,37 +490,32 @@ static MUINT32 g_DmaErr_p1[nDMA_ERR] = { 0 };
 }
 #if 1
 #define IRQ_LOG_KEEPER(irq, ppb, logT, fmt, ...) do {\
-	char *ptr;\
-	char *pDes;\
-	MINT32 avaLen;\
-	MUINT32 *ptr2 = &gSvLog[irq]._cnt[ppb][logT];\
-	unsigned int str_leng = 0;\
-	if (_LOG_ERR == logT) {\
-		str_leng = NORMAL_STR_LEN*ERR_PAGE;\
-	} \
-	else if (_LOG_DBG == logT) {\
-		str_leng = NORMAL_STR_LEN*DBG_PAGE;\
-	} \
-	else if (_LOG_INF == logT) {\
-		str_leng = NORMAL_STR_LEN*INF_PAGE;\
+	if (irq >= _IRQ_MAX) {\
+		LOG_ERR("IRQ_LOG_KEEPER : Array Max Size Exceeded!");\
 	} else {\
-		LOG_ERR("Unknown logT(%d)", (MUINT32)logT);\
-		break;\
-	} \
-	ptr = pDes = (char *)&(gSvLog[irq]._str[ppb][logT][gSvLog[irq]._cnt[ppb][logT]]); \
-	avaLen = str_leng - 1 - gSvLog[irq]._cnt[ppb][logT];\
-	if (avaLen > 1) { \
-		snprintf(pDes, avaLen, fmt, ##__VA_ARGS__); \
+		char *ptr; \
+		char *pDes;\
+		MUINT32 *ptr2 = &gSvLog[irq]._cnt[ppb][logT];\
+		unsigned int str_leng;\
+		if (_LOG_ERR == logT) {\
+			str_leng = NORMAL_STR_LEN*ERR_PAGE; \
+		} else if (_LOG_DBG == logT) {\
+			str_leng = NORMAL_STR_LEN*DBG_PAGE; \
+		} else if (_LOG_INF == logT) {\
+			str_leng = NORMAL_STR_LEN*INF_PAGE;\
+		} else {\
+			str_leng = 0;\
+		} \
+		ptr = pDes = (char *)&(gSvLog[irq]._str[ppb][logT][gSvLog[irq]._cnt[ppb][logT]]);    \
+		sprintf((char *)(pDes), fmt, ##__VA_ARGS__);   \
 		if ('\0' != gSvLog[irq]._str[ppb][logT][str_leng - 1]) {\
-			LOG_ERR("(%d)(%d)log str over flow", irq, logT);\
+			LOG_ERR("log str over flow(%d)", irq);\
 		} \
 		while (*ptr++ != '\0') { \
 			(*ptr2)++;\
 		} \
-	} else { \
-		LOG_ERR("(%d)(%d)log str available=0", irq, logT);\
 	} \
-} while (0)
+} while (0);
 #else
 #define IRQ_LOG_KEEPER(irq, ppb, logT, fmt, ...)  pr_debug("KEEPER[%s] " fmt, __func__, ##__VA_ARGS__)
 #endif
@@ -1309,7 +1304,7 @@ static long ISP_Buf_CTRL_FUNC_FRMB(unsigned long Param)
 	/* MUINT32 p1_fbc_reg[_rt_dma_max_]; */
 	unsigned long p1_fbc_reg[_rt_dma_max_];
 	/* MUINT32 p1_dma_addr_reg[_rt_dma_max_]; */
-	unsigned long p1_dma_addr_reg[_rt_dma_max_] = { 0 };
+	unsigned long p1_dma_addr_reg[_rt_dma_max_];
 	unsigned long flags;
 	ISP_RT_BUF_INFO_STRUCT_FRMB rt_buf_info;
 	ISP_DEQUE_BUF_INFO_STRUCT_FRMB deque_buf;
@@ -2283,7 +2278,7 @@ static long ISP_Buf_CTRL_FUNC_FRMB(unsigned long Param)
 					iBuf = p1_fbc[rt_dma].Bits.RCNT - 1;	/* RCNT = [1,2,3,...] */
 #endif
 					for (i = 0; i < deque_buf.count; i++) {
-						MUINT32 out = _PASS1;
+						MUINT32 out;
 
 						deque_buf.data[i].memID =
 						    pstRTBuf_FrmB->ring_buf[rt_dma].data[iBuf +
@@ -2448,6 +2443,7 @@ static long ISP_Buf_CTRL_FUNC_FRMB(unsigned long Param)
 
 #endif
 
+						DMA_TRANS(rt_dma, out);
 						bBufFilled = MTRUE;
 					/**/	if (pstRTBuf_FrmB->ring_buf[rt_dma].data[iBuf + i].
 						    bFilled != ISP_RTBC_BUF_FILLED) {
@@ -2862,8 +2858,7 @@ static MINT32 ISP_SOF_Buf_Get_FrmB(eISPIrq irqT, unsigned long long sec, unsigne
 	MUINT32 _working_dma = 0;
 	MUINT32 out = 0;
 
-	switch (irqT) {
-	case _IRQ:
+	if (_IRQ == irqT) {
 		imgo_fbc.Reg_val = pFbc[0].Reg_val;
 		img2o_fbc.Reg_val = pFbc[1].Reg_val;
 		ch_imgo = _imgo_;
@@ -2873,11 +2868,8 @@ static MINT32 ISP_SOF_Buf_Get_FrmB(eISPIrq irqT, unsigned long long sec, unsigne
 		else
 			curr_pa = pCurr_pa[1];
 		i = _PASS1;
-		break;
-	default:
-		LOG_ERR("non-supported irq type(%d)", (MUINT32)irqT);
-		return 0;
 	}
+
 	if (MTRUE == g1stSof[irqT]) {	/* 1st frame of streaming */
 #ifdef _89SERIAL_
 		pstRTBuf_FrmB->ring_buf[ch_imgo].start =
@@ -3148,17 +3140,11 @@ static MINT32 ISP_DONE_Buf_Time_FrmB(eISPIrq irqT, unsigned long long sec, unsig
 	MUINT32 shiftT = 0;
 	MUINT32 out;
 #endif
-
-	switch (irqT) {
-	case _IRQ:
+	if (_IRQ == irqT) {
 		ch_imgo = _imgo_;
 		ch_img2o = _img2o_;
 		imgo_fbc.Reg_val = pFbc[0].Reg_val;
 		img2o_fbc.Reg_val = pFbc[1].Reg_val;
-		break;
-	default:
-		LOG_ERR("non-supported irq type(%d)", (MUINT32)irqT);
-		return 0;
 	}
 
 #ifdef _rtbc_buf_que_2_0_
@@ -3830,7 +3816,6 @@ static MINT32 ISP_ED_BufQue_CTRL_FUNC_FRMB(ISP_ED_BUFQUE_STRUCT_FRMB param)
 				if (P2_EDBUF_MList_LastBufIdx < 0) {
 					LOG_ERR("P2_EDBUF_MList_LastBufIdx<0 error!");
 					ret = -EFAULT;
-					spin_unlock(&(SpinLockEDBufQueList));
 					return ret;
 				}
 
@@ -4117,19 +4102,6 @@ static MINT32 ISP_MARK_IRQ(ISP_WAIT_IRQ_STRUCT_FRMB irqinfo)
 		break;
 	}
 
-	if ((irqinfo.UserInfo.UserKey >= IRQ_USER_NUM_MAX)
-		|| (irqinfo.UserInfo.UserKey < 1)) {
-		LOG_DBG("invalid userKey(%d), max(%d)", irqinfo.UserInfo.UserKey,
-			IRQ_USER_NUM_MAX);
-		return -EINVAL;
-	}
-	if ((irqinfo.UserInfo.Type >= ISP_IRQ_TYPE_AMOUNT_FRMB)
-		|| (irqinfo.UserInfo.Type < 0)) {
-		LOG_DBG("invalid type(%d), max(%d)", irqinfo.UserInfo.Type,
-			ISP_IRQ_TYPE_AMOUNT_FRMB);
-		return -EINVAL;
-	}
-
 	/* 1. enable marked flag */
 	spin_lock_irqsave(&(IspInfo_FrmB.SpinLockIrq[eIrq]), flags);
 	IspInfo_FrmB.IrqInfo.MarkedFlag[irqinfo.UserInfo.UserKey][irqinfo.UserInfo.Type] |=
@@ -4187,21 +4159,6 @@ static MINT32 ISP_GET_MARKtoQEURY_TIME(ISP_WAIT_IRQ_STRUCT_FRMB * irqinfo)
 	default:
 		eIrq = _IRQ;
 		break;
-	}
-
-	if ((irqinfo->UserInfo.UserKey >= IRQ_USER_NUM_MAX)
-		|| (irqinfo->UserInfo.UserKey < 1)) {
-		LOG_DBG("invalid userKey(%d), max(%d)", irqinfo->UserInfo.UserKey,
-			IRQ_USER_NUM_MAX);
-		Ret = -EINVAL;
-		return Ret;
-	}
-	if ((irqinfo->UserInfo.Type >= ISP_IRQ_TYPE_AMOUNT_FRMB)
-		|| (irqinfo->UserInfo.Type < 0)) {
-		LOG_DBG("invalid type(%d), max(%d)", irqinfo->UserInfo.Type,
-			ISP_IRQ_TYPE_AMOUNT_FRMB);
-		Ret = -EINVAL;
-		return Ret;
 	}
 
 	spin_lock_irqsave(&(IspInfo_FrmB.SpinLockIrq[eIrq]), flags);
@@ -4278,18 +4235,6 @@ static MINT32 ISP_FLUSH_IRQ(ISP_WAIT_IRQ_STRUCT_FRMB irqinfo)
 		break;
 	}
 
-	if (irqinfo.UserInfo.UserKey != 0) {   /* isp driver */
-		LOG_DBG("invalid userKey(%d), max(%d)", irqinfo.UserInfo.UserKey,
-			IRQ_USER_NUM_MAX);
-		return -EINVAL;
-	}
-	if ((irqinfo.UserInfo.Type >= ISP_IRQ_TYPE_AMOUNT_FRMB)
-		|| (irqinfo.UserInfo.Type < 0)) {
-		LOG_DBG("invalid type(%d), max(%d)", irqinfo.UserInfo.Type,
-			ISP_IRQ_TYPE_AMOUNT_FRMB);
-		return -EINVAL;
-	}
-
 	/* 1. enable signal */
 	spin_lock_irqsave(&(IspInfo_FrmB.SpinLockIrq[eIrq]), flags);
 	IspInfo_FrmB.IrqInfo.Status[irqinfo.UserInfo.UserKey][irqinfo.UserInfo.Type] |=
@@ -4349,21 +4294,6 @@ static MINT32 ISP_WaitIrq_FrmB(ISP_WAIT_IRQ_STRUCT_FRMB * WaitIrq)
 	default:
 		eIrq = _IRQ;
 		break;
-	}
-
-	if ((WaitIrq->UserInfo.UserKey >= IRQ_USER_NUM_MAX)
-		|| (WaitIrq->UserInfo.UserKey < 0)) {
-		LOG_DBG("invalid userKey(%d), max(%d)", WaitIrq->UserInfo.UserKey,
-			IRQ_USER_NUM_MAX);
-		Ret = -EINVAL;
-		return Ret;
-	}
-	if ((WaitIrq->UserInfo.Type >= ISP_IRQ_TYPE_AMOUNT_FRMB)
-		|| (WaitIrq->UserInfo.Type < 0)) {
-		LOG_DBG("invalid type(%d), max(%d)", WaitIrq->UserInfo.Type,
-			ISP_IRQ_TYPE_AMOUNT_FRMB);
-		Ret = -EINVAL;
-		return Ret;
 	}
 
 	/* 1. wait type update */

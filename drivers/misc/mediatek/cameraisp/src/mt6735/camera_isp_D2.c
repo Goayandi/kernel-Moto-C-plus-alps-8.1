@@ -38,6 +38,8 @@
 #include <mach/mt_clkmgr.h>	/* For clock mgr APIS. enable_clock()/disable_clock(). */
 #include <mt-plat/sync_write.h>
 /*#include <mach/mt_spm_idle.h>*/	/* For spm_enable_sodi()/spm_disable_sodi(). */
+#include <mt-plat/mt_ccci_common.h>
+
 
 /*#include <smi_common.h>*/
 
@@ -2325,13 +2327,6 @@ static MINT32 ISP_WriteReg(ISP_REG_IO_STRUCT *pRegIo)
 	/* MUINT8 *pData = NULL; */
 	ISP_REG_STRUCT *pData = NULL;
 
-	/* The maximum number of Count should equal to PAGE_SIZE/sizeof(MUINT32)*/
-	if (pRegIo->Count > (PAGE_SIZE/sizeof(MUINT32))) {
-		LOG_DBG("pRegIo->Count error");
-		Ret = -EINVAL;
-		goto EXIT;
-	}
-
 	if (g_IspInfo.DebugMask & ISP_DBG_WRITE_REG) {
 		/* LOG_DBG("Data(0x%08X), Count(%d)", (MUINT32)(pRegIo->Data), (MUINT32)(pRegIo->Count)); */
 		LOG_DBG("Data(0x%p), Count(%d)", pRegIo->pData, pRegIo->Count);
@@ -3727,12 +3722,6 @@ static MINT32 ISP_WaitIrq(ISP_WAIT_IRQ_STRUCT WaitIrq)
 			WaitIrq.Type, WaitIrq.Status, WaitIrq.Timeout);
 	}
 #endif
-	if ((WaitIrq.Type >= ISP_IRQ_TYPE_AMOUNT) || (WaitIrq.Type < 0)) {
-		Ret = -EINVAL;
-		LOG_ERR("invalid type(%d)", WaitIrq.Type);
-		goto EXIT;
-	}
-
 	if (WaitIrq.Clear == ISP_IRQ_CLEAR_WAIT) {
 		spin_lock_irqsave(&(g_IspInfo.SpinLockIrq), flags);
 		if (g_IspInfo.IrqInfo.Status[WaitIrq.Type] & WaitIrq.Status) {
@@ -5385,6 +5374,7 @@ static MINT32 ISP_open(struct inode *pInode, struct file *pFile)
 	MUINT32 i;
 	ISP_USER_INFO_STRUCT *pUserInfo;
 	unsigned long flags;
+	char mode = 0;
 
 	/* kernellog limit to (current+150) lines per second */
 	pr_detect_count = get_detect_count();
@@ -5463,6 +5453,9 @@ static MINT32 ISP_open(struct inode *pInode, struct file *pFile)
 	}
 
 	g_IspInfo.UserCount++;
+	LOG_DBG("set exec_ccci_kern_func_by_md_id");
+	mode = 1;
+	exec_ccci_kern_func_by_md_id(0, ID_MD_RF_DESENSE, &mode, sizeof(int));
 
 	LOG_DBG("Curr UserCount(%d), (process, pid, tgid)=(%s, %d, %d), first user",
 		g_IspInfo.UserCount, current->comm, current->pid, current->tgid);
@@ -5498,6 +5491,7 @@ EXIT:
 static MINT32 ISP_release(struct inode *pInode, struct file *pFile)
 {
 	ISP_USER_INFO_STRUCT *pUserInfo;
+	char mode = 0;
 
 	LOG_DBG("+,UserCount(%d)", g_IspInfo.UserCount);
 
@@ -5552,6 +5546,9 @@ static MINT32 ISP_release(struct inode *pInode, struct file *pFile)
 	mMclk1User = 0;
 	ISP_WR32(ISP_ADDR + 0x4200, 0x00000001);
 	/*LOG_DBG("ISP_MCLK1_EN release\n");*/
+	mode = 0;
+	LOG_DBG("clear exec_ccci_kern_func_by_md_id");
+	exec_ccci_kern_func_by_md_id(0, ID_MD_RF_DESENSE, &mode, sizeof(int));
 
 	/* kernel log limit back to default */
 	set_detect_count(pr_detect_count);

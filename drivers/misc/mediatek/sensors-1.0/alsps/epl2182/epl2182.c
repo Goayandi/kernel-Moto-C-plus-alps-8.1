@@ -44,8 +44,8 @@
 #define COMPATIABLE_NAME "mediatek,epl2182"
 
 /* TODO: change ps/als integrationtime */
-int PS_INTT = 4;
-int ALS_INTT = 7;
+int PS_INTT = 5;
+int ALS_INTT = 5;
 int psEableTimes = 0;
 
 #define TXBYTES				2
@@ -54,8 +54,8 @@ int psEableTimes = 0;
 #define I2C_RETRY_COUNT		3
 
 /* TODO: change delay time */
-#define PS_DELAY			10
-#define ALS_DELAY			40
+#define PS_DELAY			105
+#define ALS_DELAY			55
 
 /* TODO: parameters for lux equation y = ax + b */
 #define LUX_PER_COUNT		1100	/* 1100 = 1.1 * 1000 */
@@ -73,7 +73,7 @@ struct epl_raw_data {
 	u16 als_ch1_raw;
 };
 
-#define EPL2182_DEV_NAME     "EPL2182"
+#define EPL2182_DEV_NAME     "epl2182"
 
 /*----------------------------------------------------------------------------*/
 #define APS_TAG                  "[ALS/PS] "
@@ -91,9 +91,8 @@ static const struct i2c_device_id epl2182_i2c_id[] = { {"EPL2182", 0}, {} };
 /*----------------------------------------------------------------------------*/
 static int epl2182_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int epl2182_i2c_remove(struct i2c_client *client);
-static int epl2182_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
-static int alsps_local_init(void);
-static int alsps_remove(void);
+static int epl2182_local_init(void);
+static int epl2182_local_uninit(void);
 /*----------------------------------------------------------------------------*/
 static int epl2182_i2c_suspend(struct i2c_client *client, pm_message_t msg);
 static int epl2182_i2c_resume(struct i2c_client *client);
@@ -184,7 +183,7 @@ struct epl2182_priv {
 
 #ifdef CONFIG_OF
 static const struct of_device_id alsps_of_match[] = {
-	{.compatible = "mediatek,alsps"},
+	{.compatible = "mediatek,epl2182"},
 	{},
 };
 #endif
@@ -193,7 +192,6 @@ static const struct of_device_id alsps_of_match[] = {
 static struct i2c_driver epl2182_i2c_driver = {
 	.probe = epl2182_i2c_probe,
 	.remove = epl2182_i2c_remove,
-	.detect = epl2182_i2c_detect,
 	.suspend = epl2182_i2c_suspend,
 	.resume = epl2182_i2c_resume,
 	.id_table = epl2182_i2c_id,
@@ -208,12 +206,12 @@ static struct i2c_driver epl2182_i2c_driver = {
 static struct epl2182_priv *epl2182_obj;
 static struct epl_raw_data gRawData;
 
-static int alsps_init_flag = -1;	/* 0<==>OK -1 <==> fail */
+static int epl2182_init_flag = -1;	/* 0<==>OK -1 <==> fail */
 
 static struct alsps_init_info epl2182_init_info = {
 	.name = EPL2182_DEV_NAME,
-	.init = alsps_local_init,
-	.uninit = alsps_remove,
+	.init = epl2182_local_init,
+	.uninit = epl2182_local_uninit,
 
 };
 
@@ -305,11 +303,11 @@ static int elan_epl2182_psensor_enable(struct epl2182_priv *epl_data, int enable
 				   EPL_INT_DISABLE | EPL_DRIVE_120MA);
 
 	if (enable) {
-		regdata = EPL_SENSING_2_TIME | EPL_PS_MODE | EPL_L_GAIN;
+		regdata = EPL_SENSING_2_TIME | EPL_PS_MODE | EPL_M_GAIN;
 		regdata = regdata | (isInterrupt ? EPL_C_SENSING_MODE : EPL_S_SENSING_MODE);
 		ret = elan_epl2182_I2C_Write(client, REG_0, W_SINGLE_BYTE, 0X02, regdata);
 
-		regdata = PS_INTT << 4 | EPL_PST_1_TIME | EPL_10BIT_ADC;
+		regdata = PS_INTT << 4 | EPL_PST_1_TIME | EPL_12BIT_ADC;
 		ret = elan_epl2182_I2C_Write(client, REG_1, W_SINGLE_BYTE, 0X02, regdata);
 
 		/* set_psensor_intr_threshold(epl_data->hw ->ps_threshold_low,epl_data->hw ->ps_threshold_high); */
@@ -317,7 +315,6 @@ static int elan_epl2182_psensor_enable(struct epl2182_priv *epl_data, int enable
 
 		ret = elan_epl2182_I2C_Write(client, REG_7, W_SINGLE_BYTE, 0X02, EPL_C_RESET);
 		ret = elan_epl2182_I2C_Write(client, REG_7, W_SINGLE_BYTE, 0x02, EPL_C_START_RUN);
-		ret = elan_epl2182_I2C_Write(client, REG_9, W_SINGLE_BYTE, 0x02, EPL_INT_ACTIVE_LOW | EPL_DRIVE_120MA);
 		msleep(PS_DELAY);
 		ret = elan_epl2182_I2C_Read(client, REG_13, R_SINGLE_BYTE, 0x01, read_data);
 		ps_state = !((read_data[0] & 0x04) >> 2);
@@ -361,7 +358,7 @@ static int elan_epl2182_lsensor_enable(struct epl2182_priv *epl_data, int enable
 		regdata = EPL_INT_DISABLE;
 		ret = elan_epl2182_I2C_Write(client, REG_9, W_SINGLE_BYTE, 0x02, regdata);
 
-		regdata = EPL_S_SENSING_MODE | EPL_SENSING_4_TIME | EPL_ALS_MODE | EPL_AUTO_GAIN;
+		regdata = EPL_S_SENSING_MODE | EPL_SENSING_8_TIME | EPL_ALS_MODE | EPL_AUTO_GAIN;
 		ret = elan_epl2182_I2C_Write(client, REG_0, W_SINGLE_BYTE, 0X02, regdata);
 
 		regdata = ALS_INTT << 4 | EPL_PST_1_TIME | EPL_10BIT_ADC;
@@ -390,8 +387,8 @@ static int epl2182_get_als_value(struct epl2182_priv *obj, u16 als)
 	int invalid = 0;
 	int lux = 0;
 
-	if (als < 15)
-		return 0;
+	//if (als < 15)
+	//	return 0;
 
 	lux = (als * obj->lux_per_count) / 1000;
 
@@ -416,7 +413,7 @@ static int epl2182_get_als_value(struct epl2182_priv *obj, u16 als)
 	}
 
 	if (!invalid) {
-#if defined(MTK_AAL_SUPPORT)
+#if 1
 		int level_high = obj->hw.als_level[idx];
 		int level_low = (idx > 0) ? obj->hw.als_level[idx - 1] : 0;
 		int level_diff = level_high - level_low;
@@ -429,7 +426,7 @@ static int epl2182_get_als_value(struct epl2182_priv *obj, u16 als)
 			value = value_low;
 		else
 			value =
-			    (level_diff * value_low + (als - level_low) * value_diff +
+			    (level_diff * value_low + (lux - level_low) * value_diff +
 			     ((level_diff + 1) >> 1)) / level_diff;
 
 		return value;
@@ -482,6 +479,26 @@ static int set_psensor_intr_threshold(uint16_t low_thd, uint16_t high_thd)
 #endif				/* #ifdef CUSTOM_KERNEL_SENSORHUB */
 
 	return ret;
+}
+
+/*----------------------------------------------------------------------------*/
+static void epl2182_dumpReg(struct i2c_client *client)
+{
+    APS_LOG("chip id REG 0x00 value = %8x\n", i2c_smbus_read_byte_data(client, 0x00));
+    APS_LOG("chip id REG 0x01 value = %8x\n", i2c_smbus_read_byte_data(client, 0x08));
+    APS_LOG("chip id REG 0x02 value = %8x\n", i2c_smbus_read_byte_data(client, 0x10));
+    APS_LOG("chip id REG 0x03 value = %8x\n", i2c_smbus_read_byte_data(client, 0x18));
+    APS_LOG("chip id REG 0x04 value = %8x\n", i2c_smbus_read_byte_data(client, 0x20));
+    APS_LOG("chip id REG 0x05 value = %8x\n", i2c_smbus_read_byte_data(client, 0x28));
+    APS_LOG("chip id REG 0x06 value = %8x\n", i2c_smbus_read_byte_data(client, 0x30));
+    APS_LOG("chip id REG 0x07 value = %8x\n", i2c_smbus_read_byte_data(client, 0x38));
+    APS_LOG("chip id REG 0x09 value = %8x\n", i2c_smbus_read_byte_data(client, 0x48));
+    APS_LOG("chip id REG 0x0D value = %8x\n", i2c_smbus_read_byte_data(client, 0x68));
+    APS_LOG("chip id REG 0x0E value = %8x\n", i2c_smbus_read_byte_data(client, 0x70));
+    APS_LOG("chip id REG 0x0F value = %8x\n", i2c_smbus_read_byte_data(client, 0x71));
+    APS_LOG("chip id REG 0x10 value = %8x\n", i2c_smbus_read_byte_data(client, 0x80));
+    APS_LOG("chip id REG 0x11 value = %8x\n", i2c_smbus_read_byte_data(client, 0x88));
+    APS_LOG("chip id REG 0x13 value = %8x\n", i2c_smbus_read_byte_data(client, 0x98));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -552,6 +569,8 @@ long epl2182_read_ps(struct i2c_client *client, u16 *data)
 
 	elan_epl2182_I2C_Read(obj->client, REG_16, R_TWO_BYTE, 0x02, read_data);
 	gRawData.ps_raw = (read_data[1] << 8) | read_data[0];
+	elan_epl2182_I2C_Read(obj->client, REG_13, R_SINGLE_BYTE, 0x01, read_data);
+	gRawData.ps_state = !((read_data[0] & 0x04) >> 2);
 
 	if (gRawData.ps_raw < obj->ps_cali)
 		*data = 0;
@@ -723,6 +742,7 @@ static void epl2182_eint_work(struct work_struct *work)
 	}
 
 exit:
+	elan_epl2182_I2C_Write(epld->client, REG_9, W_SINGLE_BYTE, 0x02, EPL_INT_ACTIVE_LOW);
 	elan_epl2182_I2C_Write(epld->client, REG_7, W_SINGLE_BYTE, 0x02, EPL_DATA_UNLOCK);
 	if (test_bit(CMC_BIT_ALS, &epld->enable)) {
 		/* APS_DBG("als enable eint mask ps!\n"); */
@@ -1341,13 +1361,6 @@ static int ps_get_data(int *value, int *status)
 }
 
 /*----------------------------------------------------------------------------*/
-
-static int epl2182_i2c_detect(struct i2c_client *client, struct i2c_board_info *info)
-{
-	strcpy(info->type, EPL2182_DEV_NAME);
-	return 0;
-}
-
 static int als_batch(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs)
 {
 	int value = 0;
@@ -1558,9 +1571,17 @@ static int epl2182_i2c_probe(struct i2c_client *client, const struct i2c_device_
 	struct als_data_path als_data = { 0 };
 	struct ps_control_path ps_ctl = { 0 };
 	struct ps_data_path ps_data = { 0 };
-	int err = 0;
+	int err = 0, temp_value = 0;
 
 	APS_FUN();
+
+	epl2182_dumpReg(client);
+
+	temp_value = i2c_smbus_read_byte_data(client, 0x98);
+	if(temp_value != 0x68) {
+		err = -ENOTSUPP;
+		goto exit;
+	}
 
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
 	if (!obj) {
@@ -1713,27 +1734,26 @@ static int epl2182_i2c_probe(struct i2c_client *client, const struct i2c_device_
 		goto exit_sensor_obj_attach_fail;
 	}
 
-	alsps_init_flag = 0;
+	epl2182_init_flag = 0;
 	APS_LOG("%s: OK\n", __func__);
 	return 0;
 
 exit_create_attr_failed:
 exit_sensor_obj_attach_fail:
+	alsps_factory_device_deregister(&epl2182_factory_device);
 exit_misc_device_register_failed:
 exit_init_failed:
 	kfree(obj);
+	epl2182_init_flag = -1;
+	obj = NULL;
 exit:
 	obj = NULL;
+	epl2182_obj = NULL;
 	epl2182_i2c_client = NULL;
 	APS_ERR("%s: err = %d\n", __func__, err);
-	alsps_init_flag = -1;
+	epl2182_init_flag = -1;
 	return err;
-
-
-
 }
-
-
 
 /*----------------------------------------------------------------------------*/
 static int epl2182_i2c_remove(struct i2c_client *client)
@@ -1746,15 +1766,14 @@ static int epl2182_i2c_remove(struct i2c_client *client)
 
 	epl2182_i2c_client = NULL;
 	i2c_unregister_device(client);
+	alsps_factory_device_deregister(&epl2182_factory_device);
 	kfree(i2c_get_clientdata(client));
 
 	return 0;
 }
 
-
-
 /*----------------------------------------------------------------------------*/
-static int alsps_local_init(void)
+static int epl2182_local_init(void)
 {
 
 	APS_FUN();
@@ -1766,14 +1785,14 @@ static int alsps_local_init(void)
 
 	APS_ERR("add driver epl2182_i2c_driver ok!\n");
 
-	if (-1 == alsps_init_flag)
+	if (-1 == epl2182_init_flag)
 		return -1;
-	/* printk("fwq loccal init---\n"); */
+
 	return 0;
 }
 
 /*----------------------------------------------------------------------------*/
-static int alsps_remove(void)
+static int epl2182_local_uninit(void)
 {
 	APS_FUN();
 

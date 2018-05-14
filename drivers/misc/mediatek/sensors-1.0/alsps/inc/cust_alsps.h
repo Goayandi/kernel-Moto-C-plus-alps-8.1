@@ -33,10 +33,17 @@ struct alsps_hw {
 	/*!< (C_CUST_ALS_LEVEL-1) levels divides all range into C_CUST_ALS_LEVEL levels*/
 	unsigned int    als_level[C_CUST_ALS_LEVEL-1];
 	unsigned int    als_value[C_CUST_ALS_LEVEL];    /*!< the value reported in each level */
+	unsigned int    state_val;
+	unsigned int    psctrl_val;
+	unsigned int    alsctrl_val;
+	unsigned int    ledctrl_val;
+	unsigned int    wait_val; 
 	unsigned int    ps_threshold;                   /*!< the threshold of proximity sensor */
 	unsigned int    als_window_loss;                /*!< the window loss  */
 	unsigned int    ps_threshold_high;
 	unsigned int    ps_threshold_low;
+	unsigned int    ps_high_thd_val;
+	unsigned int    ps_low_thd_val;
 	unsigned int    als_threshold_high;
 	unsigned int    als_threshold_low;
 	int als_power_vio_id;                                   /*!< the VIO power id of the als chip */

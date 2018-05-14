@@ -28,13 +28,7 @@ static variable defination
 ----------------------------------------------------------------------*/
 
 #define REGISTER_VALUE(x)   (x - 1)
-//solve headset pull out leads to music playback ---qiumeng@wind-mobi.com 20170222 begin
-#ifdef CONFIG_WIND_HEADSET_LEAD_MUSIC_PLAY
-static int button_press_debounce = 0x800;
-#else
 static int button_press_debounce = 0x400;
-#endif
-//solve headset pull out leads to music playback ---qiumeng@wind-mobi.com 20170222 end
 int cur_key = 0;
 struct head_dts_data accdet_dts_data;
 s8 accdet_auxadc_offset;
@@ -42,10 +36,15 @@ int accdet_irq;
 unsigned int gpiopin, headsetdebounce;
 unsigned int accdet_eint_type = IRQ_TYPE_LEVEL_LOW;/* default low_level trigger */
 struct headset_mode_settings *cust_headset_settings;
-#define ACCDET_DEBUG(format, args...) pr_debug(format, ##args)
-#define ACCDET_INFO(format, args...) pr_warn(format, ##args)
-#define ACCDET_ERROR(format, args...) pr_err(format, ##args)
+#define ACCDET_DEBUG(format, args...)	pr_debug(format, ##args)
+#define ACCDET_INFO(format, args...)	pr_info(format, ##args)
+#define ACCDET_ERROR(format, args...)	pr_info(format, ##args)
+#define JUST_INPUT_NO_SWITCH  0
+#if JUST_INPUT_NO_SWITCH
 static struct switch_dev accdet_data;
+#endif
+static void send_accdet_status_event(int cable_type, int status);
+
 static struct input_dev *kpd_accdet_dev;
 static struct cdev *accdet_cdev;
 static struct class *accdet_class;
@@ -105,9 +104,6 @@ struct pinctrl_state *pins_eint_int;
 #endif
 #ifdef DEBUG_THREAD
 #endif
-//qiumeng@wind-mobi.com 20170111 begin
-u32 headset_flag = 0;
-//qiumeng@wind-mobi.com 20170111 end
 static u32 pmic_pwrap_read(u32 addr);
 static void pmic_pwrap_write(u32 addr, unsigned int wdata);
 char *accdet_status_string[5] = {
@@ -216,7 +212,7 @@ static void pmic_pwrap_write(unsigned int addr, unsigned int wdata)
 
 static int Accdet_PMIC_IMM_GetOneChannelValue(int deCount)
 {
-	unsigned int vol_val = 0;
+	int vol_val = 0;
 
 	pmic_pwrap_write(ACCDET_AUXADC_CTL_SET, ACCDET_CH_REQ_EN);
 	mdelay(3);
@@ -226,6 +222,10 @@ static int Accdet_PMIC_IMM_GetOneChannelValue(int deCount)
 	vol_val = (pmic_pwrap_read(ACCDET_AUXADC_REG) & ACCDET_DATA_MASK);
 	vol_val = (vol_val * 1800) / 4096;	/*mv*/
 	vol_val -= accdet_auxadc_offset;
+	if (vol_val < 0) {
+		ACCDET_DEBUG("ACCDET read auxadc vol:%d adjust to 0\n", vol_val);
+		vol_val = 0;
+	}
 	ACCDET_DEBUG("ACCDET accdet_auxadc_offset: %d mv, MIC_Voltage1 = %d mv!\n\r", accdet_auxadc_offset, vol_val);
 	return vol_val;
 }
@@ -249,6 +249,8 @@ static void accdet_FSA8049_disable(void)
 #endif
 static inline void headset_plug_out(void)
 {
+	send_accdet_status_event(cable_type, 0);
+
 	accdet_status = PLUG_OUT;
 	cable_type = NO_DEVICE;
 	/*update the cable_type*/
@@ -257,8 +259,10 @@ static inline void headset_plug_out(void)
 		ACCDET_DEBUG(" [accdet] headset_plug_out send key = %d release\n", cur_key);
 		cur_key = 0;
 	}
+#if JUST_INPUT_NO_SWITCH
 	switch_set_state((struct switch_dev *)&accdet_data, cable_type);
-	ACCDET_DEBUG(" [accdet] set state in cable_type = NO_DEVICE\n");
+#endif
+	ACCDET_DEBUG("[accdet] set state in cable_type = NO_DEVICE\n");
 
 }
 
@@ -451,7 +455,7 @@ static void accdet_eint_work_callback(struct work_struct *work)
 			ACCDET_DEBUG("[Accdet] TS3A225E Detection sequence completed without successful!\n");
 		}
 #endif
-
+		msleep(500);
 		accdet_init();	/* do set pwm_idle on in accdet_init*/
 
 #ifdef CONFIG_ACCDET_PIN_RECOGNIZATION
@@ -522,9 +526,6 @@ static irqreturn_t accdet_eint_func(int irq, void *data)
 #endif
 
 		/* update the eint status */
-		//qiumeng@wind-mobi.com 20170111 begin
-		headset_flag = 0;
-		//qiumeng@wind-mobi.com 20170111 end
 		cur_eint_state = EINT_PIN_PLUG_OUT;
 	} else {
 		/*
@@ -546,9 +547,6 @@ static irqreturn_t accdet_eint_func(int irq, void *data)
 		gpio_set_debounce(gpiopin, accdet_dts_data.accdet_plugout_debounce * 1000);
 #endif
 		/* update the eint status */
-		//qiumeng@wind-mobi.com 20170111 begin
-		headset_flag = 1;
-		//qiumeng@wind-mobi.com 20170111 end
 		cur_eint_state = EINT_PIN_PLUG_IN;
 
 		mod_timer(&micbias_timer, jiffies + MICBIAS_DISABLE_TIMER);
@@ -642,18 +640,7 @@ static int key_check(int b)
 	else if ((b < accdet_dts_data.three_key.up_key) && (b >= accdet_dts_data.three_key.mid_key))
 		return UP_KEY;
 	else if (b < accdet_dts_data.three_key.mid_key)
-	{
-	  //solve headset pull out leads to music playback ---qiumeng@wind-mobi.com 20170307 begin
-	  #ifndef CONFIG_WIND_HEADSET_LEAD_MUSIC_PLAY
-		  if((16 <= b ) && (b <= 28))
-			  return NO_KEY;
-		  else
-			  return MD_KEY;
-	  #else
-	      return MD_KEY;
-	  #endif
-	  //solve headset pull out leads to music playback ---qiumeng@wind-mobi.com 20170307 end
-	}
+		return MD_KEY;
 	ACCDET_DEBUG("[accdet] leave key_check!!\n");
 	return NO_KEY;
 }
@@ -675,6 +662,28 @@ static int key_check(int b)
 }
 
 #endif
+
+static void send_accdet_status_event(int cable_type, int status)
+{
+	switch (cable_type) {
+	case HEADSET_NO_MIC:
+		input_report_switch(kpd_accdet_dev, SW_HEADPHONE_INSERT, status);
+		input_report_switch(kpd_accdet_dev, SW_JACK_PHYSICAL_INSERT, status);
+		input_sync(kpd_accdet_dev);
+		ACCDET_DEBUG("[Accdet]HEADSET_NO_MIC(3-pole) %s\n", status?"PlugIn":"PlugOut");
+		break;
+	case HEADSET_MIC:
+		input_report_switch(kpd_accdet_dev, SW_HEADPHONE_INSERT, status);
+		input_report_switch(kpd_accdet_dev, SW_MICROPHONE_INSERT, status);
+		input_report_switch(kpd_accdet_dev, SW_JACK_PHYSICAL_INSERT, status);
+		input_sync(kpd_accdet_dev);
+		ACCDET_DEBUG("[Accdet]HEADSET_MIC(4-pole) %s\n", status?"PlugIn":"PlugOut");
+		break;
+	default:
+		ACCDET_DEBUG("[Accdet]Invalid cableType\n");
+	}
+}
+
 static void send_key_event(int keycode, int flag)
 {
 	switch (keycode) {
@@ -1128,12 +1137,18 @@ static void accdet_work_callback(struct work_struct *work)
 #endif
 #endif
 	mutex_lock(&accdet_eint_irq_sync_mutex);
-	if (1 == eint_accdet_sync_flag)
+	if (1 == eint_accdet_sync_flag) {
+		ACCDET_DEBUG("%s %d\n", __func__, __LINE__);
+		send_accdet_status_event(cable_type, 1);
+
+#if JUST_INPUT_NO_SWITCH
 		switch_set_state((struct switch_dev *)&accdet_data, cable_type);
-	else
+#endif
+	} else {
 		ACCDET_DEBUG("[Accdet] Headset has plugged out don't set accdet state\n");
+	}
 	mutex_unlock(&accdet_eint_irq_sync_mutex);
-	ACCDET_DEBUG(" [accdet] set state in cable_type  status\n");
+	ACCDET_DEBUG("[accdet] set state in cable_type  status\n");
 
 	wake_unlock(&accdet_irq_lock);
 }
@@ -1147,33 +1162,39 @@ void accdet_get_dts_data(void)
 	#else
 	int three_key[4];
 	#endif
+	int ret = 0;
 
 	ACCDET_INFO("[ACCDET]Start accdet_get_dts_data");
 	node = of_find_matching_node(node, accdet_of_match);
 	if (node) {
-		of_property_read_u32_array(node, "headset-mode-setting", debounce, ARRAY_SIZE(debounce));
 		of_property_read_u32(node, "accdet-mic-vol", &accdet_dts_data.mic_mode_vol);
 		of_property_read_u32(node, "accdet-plugout-debounce", &accdet_dts_data.accdet_plugout_debounce);
 		of_property_read_u32(node, "accdet-mic-mode", &accdet_dts_data.accdet_mic_mode);
 #ifdef CONFIG_FOUR_KEY_HEADSET
-		of_property_read_u32_array(node, "headset-four-key-threshold", four_key, ARRAY_SIZE(four_key));
-		memcpy(&accdet_dts_data.four_key, four_key+1, sizeof(struct four_key_threshold));
+		ret = of_property_read_u32_array(node, "headset-four-key-threshold", four_key, ARRAY_SIZE(four_key));
+		if (!ret)
+			memcpy(&accdet_dts_data.four_key, four_key+1, sizeof(struct four_key_threshold));
 		ACCDET_INFO("[Accdet]mid-Key = %d, voice = %d, up_key = %d, down_key = %d\n",
 		     accdet_dts_data.four_key.mid_key_four, accdet_dts_data.four_key.voice_key_four,
 		     accdet_dts_data.four_key.up_key_four, accdet_dts_data.four_key.down_key_four);
 #else
 		#ifdef CONFIG_HEADSET_TRI_KEY_CDD
-		of_property_read_u32_array(node, "headset-three-key-threshold-CDD", three_key, ARRAY_SIZE(three_key));
+		ret = of_property_read_u32_array(node, "headset-three-key-threshold-CDD",
+				three_key, ARRAY_SIZE(three_key));
 		#else
-		of_property_read_u32_array(node, "headset-three-key-threshold", three_key, ARRAY_SIZE(three_key));
+		ret = of_property_read_u32_array(node, "headset-three-key-threshold",
+				three_key, ARRAY_SIZE(three_key));
 		#endif
-		memcpy(&accdet_dts_data.three_key, three_key+1, sizeof(struct three_key_threshold));
+		if (!ret)
+			memcpy(&accdet_dts_data.three_key, three_key+1, sizeof(struct three_key_threshold));
 		ACCDET_INFO("[Accdet]mid-Key = %d, up_key = %d, down_key = %d\n",
 		     accdet_dts_data.three_key.mid_key, accdet_dts_data.three_key.up_key,
 		     accdet_dts_data.three_key.down_key);
 #endif
 
-		memcpy(&accdet_dts_data.headset_debounce, debounce, sizeof(debounce));
+		ret = of_property_read_u32_array(node, "headset-mode-setting", debounce, ARRAY_SIZE(debounce));
+		if (!ret)
+			memcpy(&accdet_dts_data.headset_debounce, debounce, sizeof(debounce));
 		cust_headset_settings = &accdet_dts_data.headset_debounce;
 		ACCDET_INFO("[Accdet]pwm_width = %x, pwm_thresh = %x\n deb0 = %x, deb1 = %x, mic_mode = %d\n",
 		     cust_headset_settings->pwm_width, cust_headset_settings->pwm_thresh,
@@ -1352,11 +1373,6 @@ static ssize_t store_accdet_call_state(struct device_driver *ddri, const char *b
 {
 	int ret = 0;
 
-	if (buf == NULL) {
-		ACCDET_INFO("[%s] NULL input!!\n",  __func__);
-		return -EINVAL;
-	}
-
 	if (strlen(buf) < 1) {
 		ACCDET_INFO("[%s] Invalid input!!\n",  __func__);
 		return -EINVAL;
@@ -1375,8 +1391,8 @@ static ssize_t store_accdet_call_state(struct device_driver *ddri, const char *b
 		break;
 	case CALL_ACTIVE:
 		ACCDET_INFO("[%s]accdet call: active or hold state!\n", __func__);
-		ACCDET_INFO("[%s]accdet_ioctl : button_status=%d (state:%d)\n",
-			__func__, button_status, accdet_data.state);
+		/*ACCDET_INFO("[%s]accdet_ioctl : button_status=%d (state:%d)\n",
+			__func__, button_status, accdet_data.state);*/
 		/*return button_status;*/
 		break;
 	default:
@@ -1407,11 +1423,6 @@ static ssize_t store_accdet_set_headset_mode(struct device_driver *ddri, const c
 {
 	int ret = 0;
 	int tmp_headset_mode = 0;
-
-	if (buf == NULL) {
-		ACCDET_INFO("[%s] NULL input!!\n",  __func__);
-		return -EINVAL;
-	}
 
 	if (strlen(buf) < 1) {
 		ACCDET_INFO("[%s] Invalid input!!\n",  __func__);
@@ -1457,17 +1468,6 @@ static ssize_t show_accdet_dump_register(struct device_driver *ddri, char *buf)
 
 	return strlen(buf);
 }
-//tuwenzan@wind-mobi.com add at 20161124 begin
-#ifdef CONFIG_WIND_FM_RSSI
-static ssize_t show_fm_rssi_state(struct device_driver *ddri, char *buf)
-{
-	signed int rssi_value = 0;
-	mt6627_GetCurRSSI(&rssi_value);
-	return sprintf(buf,"Rssi = %d\n",rssi_value);
-}
-#endif
-//tuwenzan@wind-mobi.com add at 20161124 end
-
 
 static int dbug_thread(void *unused)
 {
@@ -1483,12 +1483,6 @@ static ssize_t store_accdet_start_debug_thread(struct device_driver *ddri, const
 {
 	int error = 0;
 	int ret = 0;
-	int tmp_value = 0;
-
-	if (buf == NULL) {
-		ACCDET_INFO("[%s] NULL input!!\n",  __func__);
-		return -EINVAL;
-	}
 
 	if (strlen(buf) < 1) {
 		ACCDET_INFO("[%s] Invalid input!!\n",  __func__);
@@ -1496,8 +1490,8 @@ static ssize_t store_accdet_start_debug_thread(struct device_driver *ddri, const
 	}
 
 	/* if write 0, Invalid; otherwise, valid */
-	ret = kstrtoint(buf, 10, &tmp_value);
-	if (tmp_value) {
+	ret = strncmp(buf, "0", 1);
+	if (ret) {
 		g_start_debug_thread = 1;
 		thread = kthread_run(dbug_thread, 0, "ACCDET");
 		if (IS_ERR(thread)) {
@@ -1517,12 +1511,6 @@ static ssize_t store_accdet_start_debug_thread(struct device_driver *ddri, const
 static ssize_t store_accdet_dump_register(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int ret = 0;
-	int tmp_value = 0;
-
-	if (buf == NULL) {
-		ACCDET_INFO("[%s] NULL input!!\n",  __func__);
-		return -EINVAL;
-	}
 
 	if (strlen(buf) < 1) {
 		ACCDET_INFO("[%s] Invalid input!!\n",  __func__);
@@ -1530,8 +1518,8 @@ static ssize_t store_accdet_dump_register(struct device_driver *ddri, const char
 	}
 
 	/* if write 0, Invalid; otherwise, valid */
-	ret = kstrtoint(buf, 10, &tmp_value);
-	if (tmp_value) {
+	ret = strncmp(buf, "0", 1);
+	if (ret) {
 		g_dump_register = 1;
 		ACCDET_INFO("[%s]start dump regs!\n",  __func__);
 	} else {
@@ -1547,11 +1535,6 @@ static ssize_t store_accdet_set_register(struct device_driver *ddri, const char 
 	int ret = 0;
 	unsigned int addr_temp = 0;
 	unsigned int value_temp = 0;
-
-	if (buf == NULL) {
-		ACCDET_INFO("[%s] NULL input!!\n",  __func__);
-		return -EINVAL;
-	}
 
 	if (strlen(buf) < 3) {
 		ACCDET_INFO("[%s] Invalid input!!\n",  __func__);
@@ -1573,15 +1556,26 @@ static ssize_t store_accdet_set_register(struct device_driver *ddri, const char 
 	return count;
 }
 
+static ssize_t show_accdet_state(struct device_driver *ddri, char *buf)
+{
+	char temp_type = (char)cable_type;
+
+	if (buf == NULL) {
+		ACCDET_ERROR("[%s] *buf is NULL Pointer\n",  __func__);
+		return -EINVAL;
+	}
+
+	snprintf(buf, 3, "%d\n", temp_type);
+
+	return strlen(buf);
+}
+
 /*----------------------------------------------------------------------------*/
 static DRIVER_ATTR(dump_register, S_IWUSR | S_IRUGO, show_accdet_dump_register, store_accdet_dump_register);
 static DRIVER_ATTR(set_headset_mode, S_IWUSR | S_IRUGO, NULL, store_accdet_set_headset_mode);
 static DRIVER_ATTR(start_debug, S_IWUSR | S_IRUGO, NULL, store_accdet_start_debug_thread);
 static DRIVER_ATTR(set_register, S_IWUSR | S_IRUGO, NULL, store_accdet_set_register);
-//tuwenzan@wind-mobi.com add at 20161124 begin
-#ifdef CONFIG_WIND_FM_RSSI
-static DRIVER_ATTR(fm_rssi_state, 0644, show_fm_rssi_state, NULL);
-#endif
+static DRIVER_ATTR(state, S_IWUSR | S_IRUGO, show_accdet_state, NULL);
 
 /*----------------------------------------------------------------------------*/
 static struct driver_attribute *accdet_attr_list[] = {
@@ -1590,9 +1584,7 @@ static struct driver_attribute *accdet_attr_list[] = {
 	&driver_attr_dump_register,
 	&driver_attr_set_headset_mode,
 	&driver_attr_accdet_call_state,
-#ifdef CONFIG_WIND_FM_RSSI
-	&driver_attr_fm_rssi_state,
-#endif
+	&driver_attr_state,
 /*#ifdef CONFIG_ACCDET_PIN_RECOGNIZATION*/
 	&driver_attr_accdet_pin_recognition,
 /*#endif*/
@@ -1600,7 +1592,6 @@ static struct driver_attribute *accdet_attr_list[] = {
 	&driver_attr_TS3A225EConnectorType,
 #endif
 };
-//tuwenzan@wind-mobi.com add at 20161124 end
 
 static int accdet_create_attr(struct device_driver *driver)
 {
@@ -1660,6 +1651,7 @@ int mt_accdet_probe(struct platform_device *dev)
 	/*--------------------------------------------------------------------
 	// below register accdet as switch class
 	//------------------------------------------------------------------*/
+#if JUST_INPUT_NO_SWITCH
 	accdet_data.name = "h2w";
 	accdet_data.index = 0;
 	accdet_data.state = NO_DEVICE;
@@ -1668,6 +1660,7 @@ int mt_accdet_probe(struct platform_device *dev)
 		ACCDET_ERROR("[Accdet]switch_dev_register returned:%d!\n", ret);
 		return 1;
 	}
+#endif
 	/*----------------------------------------------------------------------
 	// Create normal device for auido use
 	//--------------------------------------------------------------------*/
@@ -1707,6 +1700,12 @@ int mt_accdet_probe(struct platform_device *dev)
 	__set_bit(KEY_VOLUMEDOWN, kpd_accdet_dev->keybit);
 	__set_bit(KEY_VOLUMEUP, kpd_accdet_dev->keybit);
 	__set_bit(KEY_VOICECOMMAND, kpd_accdet_dev->keybit);
+
+	__set_bit(EV_SW, kpd_accdet_dev->evbit);
+	__set_bit(SW_HEADPHONE_INSERT, kpd_accdet_dev->swbit);
+	__set_bit(SW_MICROPHONE_INSERT, kpd_accdet_dev->swbit);
+	__set_bit(SW_JACK_PHYSICAL_INSERT, kpd_accdet_dev->swbit);
+	__set_bit(SW_LINEOUT_INSERT, kpd_accdet_dev->swbit);
 
 	kpd_accdet_dev->id.bustype = BUS_HOST;
 	kpd_accdet_dev->name = "ACCDET";
@@ -1769,7 +1768,9 @@ void mt_accdet_remove(void)
 	destroy_workqueue(accdet_eint_workqueue);
 #endif
 	destroy_workqueue(accdet_workqueue);
+#if JUST_INPUT_NO_SWITCH
 	switch_dev_unregister(&accdet_data);
+#endif
 	device_del(accdet_nor_device);
 	class_destroy(accdet_class);
 	cdev_del(accdet_cdev);
@@ -1858,12 +1859,15 @@ void mt_accdet_pm_restore_noirq(void)
 	case 0:		/*AB=0*/
 		cable_type = HEADSET_NO_MIC;
 		accdet_status = HOOK_SWITCH;
+		send_accdet_status_event(cable_type, 1);
 		break;
 	case 1:		/*AB=1*/
 		cable_type = HEADSET_MIC;
 		accdet_status = MIC_BIAS;
+		send_accdet_status_event(cable_type, 1);
 		break;
 	case 3:		/*AB=3*/
+		send_accdet_status_event(cable_type, 0);
 		cable_type = NO_DEVICE;
 		accdet_status = PLUG_OUT;
 		break;
@@ -1871,7 +1875,9 @@ void mt_accdet_pm_restore_noirq(void)
 		ACCDET_DEBUG("[Accdet]accdet_pm_restore_noirq: accdet current status error!\n");
 		break;
 	}
+#if JUST_INPUT_NO_SWITCH
 	switch_set_state((struct switch_dev *)&accdet_data, cable_type);
+#endif
 	if (cable_type == NO_DEVICE) {
 #ifdef CONFIG_ACCDET_PIN_RECOGNIZATION
 		init_timer(&accdet_disable_ipoh_timer);
@@ -1897,7 +1903,6 @@ void mt_accdet_pm_restore_noirq(void)
 #endif
 	}
 }
-
 /*//////////////////////////////////IPO_H end/////////////////////////////////////////////*/
 long mt_accdet_unlocked_ioctl(unsigned int cmd, unsigned long arg)
 {
@@ -1909,7 +1914,6 @@ long mt_accdet_unlocked_ioctl(unsigned int cmd, unsigned long arg)
 		ACCDET_DEBUG("[Accdet]accdet_ioctl : CALL_STATE=%d\n", call_status);
 		break;
 	case GET_BUTTON_STATUS:
-		ACCDET_DEBUG("[Accdet]accdet_ioctl : Button_Status=%d (state:%d)\n", button_status, accdet_data.state);
 		return button_status;
 	default:
 		ACCDET_DEBUG("[Accdet]accdet_ioctl : default\n");
@@ -1917,3 +1921,4 @@ long mt_accdet_unlocked_ioctl(unsigned int cmd, unsigned long arg)
 	}
 	return 0;
 }
+

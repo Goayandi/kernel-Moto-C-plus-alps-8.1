@@ -166,7 +166,6 @@ union EPL2182_CUST_DATA {
 	struct EPL2182_CUST getPSRawData;
 };
 /*----------------------------------------------------------------------------*/
-extern struct platform_device *get_alsps_platformdev(void);
 
 #endif
 

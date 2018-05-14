@@ -1990,16 +1990,6 @@ char *mtkfb_find_lcm_driver(void)
 	}
 #endif
 	/* printk("%s, %s\n", __func__, mtkfb_lcm_name); */
-/* Vanzo:maxiaojun on: Mon, 26 Aug 2013 17:04:18 +0800
-    * board device name support.
-     */
-#if 1//def VANZO_DEVICE_NAME_SUPPORT
-    {
-        extern void v_set_dev_name(int id, char *name);
-        v_set_dev_name(1, mtkfb_lcm_name);
-    }
-#endif
-// End of Vanzo:maxiaojun
 	return mtkfb_lcm_name;
 }
 

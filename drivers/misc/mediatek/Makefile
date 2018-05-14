@@ -169,5 +169,6 @@ obj-$(CONFIG_MTK_TINYSYS_SCP_SUPPORT) += audio_ipi/
 obj-$(CONFIG_USB)	+= usb_boost/
 obj-$(CONFIG_RT_REGMAP) += rt-regmap/
 
-obj-$(CONFIG_WIND_DEVICE_INFO) += wind_device_info/
+
 obj-$(CONFIG_INPUT_SX9310) += sar/
+obj-$(CONFIG_WIND_DEVICE_INFO) += wind_device_info/

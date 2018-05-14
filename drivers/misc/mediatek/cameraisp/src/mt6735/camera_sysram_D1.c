@@ -633,8 +633,7 @@ static int SYSRAM_Open(
 		pProc = (SYSRAM_PROC_STRUCT *)(pFile->private_data);
 		pProc->Pid = 0;
 		pProc->Tgid = 0;
-		strncpy(pProc->ProcName, SYSRAM_PROC_NAME, sizeof(pProc->ProcName)-1);
-		pProc->ProcName[sizeof(pProc->ProcName)-1] = '\0';
+		strcpy(pProc->ProcName, SYSRAM_PROC_NAME);
 		pProc->Table = 0;
 		pProc->Time64 = Time64;
 		pProc->TimeS = Sec;
@@ -823,7 +822,7 @@ static int SYSRAM_mmap(
 	struct file *pFile,
 	struct vm_area_struct *pVma)
 {
-	unsigned long length = 0;
+	long length = 0;
 	MUINT32 pfn = 0x0;
 	/* LOG_MSG(""); */
 	pVma->vm_page_prot = pgprot_noncached(pVma->vm_page_prot);
@@ -896,8 +895,7 @@ static long SYSRAM_Ioctl(
 				if (pProc->Tgid == 0) {
 					pProc->Pid = current->pid;
 					pProc->Tgid = current->tgid;
-					strncpy(pProc->ProcName, current->comm, sizeof(pProc->ProcName)-1);
-					pProc->ProcName[sizeof(pProc->ProcName)-1] = '\0';
+					strcpy(pProc->ProcName, current->comm);
 					SYSRAM_SpinUnlock();
 				} else{
 					SYSRAM_SpinUnlock();
@@ -939,8 +937,7 @@ static long SYSRAM_Ioctl(
 				if (pProc->Table == 0) {
 					pProc->Pid = 0;
 					pProc->Tgid = 0;
-					strncpy(pProc->ProcName, SYSRAM_PROC_NAME, sizeof(pProc->ProcName)-1);
-					pProc->ProcName[sizeof(pProc->ProcName)-1] = '\0';
+					strcpy(pProc->ProcName, SYSRAM_PROC_NAME);
 				}
 				SYSRAM_SpinUnlock();
 			} else{

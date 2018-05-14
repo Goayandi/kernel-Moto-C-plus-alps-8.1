@@ -26,7 +26,7 @@
 #define SENSOR_PR_ERR(fmt, args...)	pr_err(SENSOR_TAG fmt, ##args)
 #define SENSOR_LOG(fmt, args...)	pr_debug(SENSOR_TAG fmt, ##args)
 
-int get_accel_dts_func(struct device_node *node, struct acc_hw *hw)
+/* int get_accel_dts_func(struct device_node *node, struct acc_hw *hw)
 {
 	int i, ret;
 	u32 i2c_num[] = {0};
@@ -81,7 +81,7 @@ int get_accel_dts_func(struct device_node *node, struct acc_hw *hw)
 	return 0;
 }
 
-
+*/
 int get_alsps_dts_func(struct device_node *node, struct alsps_hw *hw)
 {
 	int i, ret;
